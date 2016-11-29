@@ -11,15 +11,14 @@
 
 DWORD WINAPI threadWork(LPVOID);
 
-//Command Line Parameters
 int enableMutex = false;	//Command line parameter
 int count = 0;	//Actual count after update by threads
 unsigned long numberIter = 0;	//Command line parameter
 
-//Global Handle
+//Global Handles
 HANDLE countMutex;
+HANDLE outputMutex;
 
-//Program Header
 const std::string title = "Sam Justice - CSIS 443, Fall 2016 - Final Project";
 
 int main(int argc, char * argv[]) {
@@ -30,7 +29,6 @@ int main(int argc, char * argv[]) {
 	DWORD exitCode;
 	HANDLE threads[MAXTHREADCOUNT];
 	enum threadExitCodes { success = 0, waitFailure = -1, releaseMutexFailure = -2 };
-	std::stringstream message;
 
 	//Thread Parameters
 	LPSECURITY_ATTRIBUTES lpThreadAttributes = NULL;
@@ -95,6 +93,19 @@ int main(int argc, char * argv[]) {
 		}
 	}
 
+	//Create a mutex that will prevent more than one thread from writing to the screen at once
+	outputMutex = CreateMutex(NULL, FALSE, NULL);
+
+	if (outputMutex == NULL)
+	{
+		std::cout << "Creation of a mutex failed. Please exit and try again." << std::endl << std::endl;
+
+		std::cout << "Enter any key to end execution of this program   . . .   ";
+		std::cin >> exit;                                             //to pause program
+
+		return -1;
+	}
+
 	//Create the threads and calculate the theoretical count value based on the thread IDs
 	for (int i = 0; i < numberOfThreads; i++) {
 		threads[i] = (HANDLE) _beginthreadex(lpThreadAttributes, stackSize, (unsigned(_stdcall *) (void *)) &threadWork, NULL, (unsigned)dwCreationFlags, (unsigned *)&targetThreadID);
@@ -114,9 +125,8 @@ int main(int argc, char * argv[]) {
 			case WAIT_FAILED:
 			case WAIT_ABANDONED:
 			{
-				message << std::endl << "ERROR: Thread " << GetThreadId(threads[i]) << " did not return successfully. "
+				std::cout << std::endl << "ERROR: Thread " << GetThreadId(threads[i]) << " did not return successfully. "
 					<< "Please exit and try again." << std::endl << std::endl;
-				std::cout << message.str();
 
 				std::cout << "Enter any key to end execution of this program   . . .   ";
 				std::cin >> exit;                                             //to pause program
@@ -136,10 +146,9 @@ int main(int argc, char * argv[]) {
 			{
 				case waitFailure:
 				{
-					message << std::endl << "ERROR: Thread " << GetThreadId(threads[i])
-						<< " failed to successfully obtain the mutex. Please exit and try again."
+					std::cout << std::endl << "ERROR: Thread " << GetThreadId(threads[i]) 
+						<< " failed to successfully obtain the mutex. Please exit and try again." 
 						<< std::endl << std::endl;
-					std::cout << message.str();
 
 					std::cout << "Enter any key to end execution of this program   . . .   ";
 					std::cin >> exit;                                             //to pause program
@@ -150,10 +159,9 @@ int main(int argc, char * argv[]) {
 				}
 				case releaseMutexFailure:
 				{
-					message << std::endl << "ERROR: Thread " << GetThreadId(threads[i])
-						<< " failed to successfully release the mutex. Please exit and try again."
+					std::cout << std::endl << "ERROR: Thread " << GetThreadId(threads[i]) 
+						<< " failed to successfully release a mutex. Please exit and try again." 
 						<< std::endl << std::endl;
-					std::cout << message.str();
 
 					std::cout << "Enter any key to end execution of this program   . . .   ";
 					std::cin >> exit;                                             //to pause program
@@ -177,6 +185,7 @@ int main(int argc, char * argv[]) {
 		CloseHandle(threads[i]);
 
 	CloseHandle(countMutex);
+	CloseHandle(outputMutex);
 
 	//Exit the program
 	std::cout << std::endl << "Enter any key to end execution of this program   . . .   ";
@@ -189,11 +198,14 @@ DWORD WINAPI threadWork(LPVOID threadNo)
 {
 	DWORD waitResult;
 	enum exitCodes { success = 0, waitFailure = -1, releaseMutexFailure = -2 };
-	std::stringstream message;
+	
+	//Obtain output mutex before writing to the console
+	WaitForSingleObject(outputMutex, INFINITE);
 
-	//Log a message with the thread's numeric identifier as it is created 
-	message << "A worker thread has been created with an ID of: " << GetCurrentThreadId() << std::endl;
-	std::cout << message.str();
+	std::cout << "A worker thread has been created with an ID of: " << GetCurrentThreadId() << std::endl;
+
+	if (!ReleaseMutex(outputMutex))
+		return releaseMutexFailure;
 
 	//Create a CPU load by burning some cycles
 	for (unsigned int i = 0; i < numberIter; i++) {
@@ -234,11 +246,14 @@ DWORD WINAPI threadWork(LPVOID threadNo)
 		}
 	}
 
-	//Log a message with the thread's numeric identifier as it terminates
-	message = std::stringstream();
-	message << "Thread " << GetCurrentThreadId() << " has terminated. " << std::endl;
-	std::cout << message.str();
-	
+	//Obtain output mutex before writing to the console
+	WaitForSingleObject(outputMutex, INFINITE);
+
+	std::cout << "Thread " << GetCurrentThreadId() << " has terminated. " << std::endl;
+
+	if (!ReleaseMutex(outputMutex))
+		return releaseMutexFailure;
+
 	//Notify main this thread is done
 	return success;
 }
