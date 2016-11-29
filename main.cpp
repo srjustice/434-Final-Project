@@ -24,6 +24,7 @@ const std::string title = "Sam Justice - CSIS 443, Fall 2016 - Final Project";
 int main(int argc, char * argv[]) {
 	// Local variables
 	char exit;
+	int theoreticalCount = 0;
 	DWORD waitResult;
 
 	// Thread Parameters
@@ -37,7 +38,6 @@ int main(int argc, char * argv[]) {
 	std::cout << title << std::endl << std::endl << std::endl;
 
 	// Get the command line parameters
-
 	int numberOfThreads = atoi(argv[1]);
 	if (numberOfThreads < 0 || numberOfThreads > 100)
 	{
@@ -71,11 +71,19 @@ int main(int argc, char * argv[]) {
 		return 0;
 	}
 
-	int theoreticalCount = ((numberOfThreads * 10) * numberIter) * numberOfThreads;
-
 	if (enableMutex)
 	{
 		mutex = CreateMutex(NULL, FALSE, NULL);
+
+		if (mutex == NULL)
+		{
+			std::cout << "Creation of mutex failed. Please exit and try again." << std::endl;
+
+			std::cout << "Enter any key to end execution of this program   . . .   ";
+			std::cin >> exit;                                             //to pause program
+
+			return 0;
+		}
 	}
 
 	//When using Semaphore Method
@@ -84,7 +92,9 @@ int main(int argc, char * argv[]) {
 	// For each thread
 	for (int i = 0; i < numberOfThreads; i++) {
 
-		threads[i] = (HANDLE) _beginthreadex(lpThreadAttributes, stackSize, (unsigned(_stdcall *) (void *)) &threadWork, (void *) &numberOfThreads, dwCreationFlags, NULL);
+		//threads[i] = (HANDLE) _beginthreadex(lpThreadAttributes, stackSize, (unsigned(_stdcall *) (void *)) &threadWork, (void *) &numberOfThreads, (unsigned) dwCreationFlags, (unsigned *) &targetThreadID);
+		threads[i] = (HANDLE) _beginthreadex(lpThreadAttributes, stackSize, (unsigned(_stdcall *) (void *)) &threadWork, NULL, (unsigned)dwCreationFlags, (unsigned *)&targetThreadID);
+		theoreticalCount = theoreticalCount + ((10 * targetThreadID) * numberIter);
 		Sleep(10);	// Let the new thread run
 	}
 
@@ -181,7 +191,7 @@ int main(int argc, char * argv[]) {
 DWORD WINAPI threadWork(LPVOID threadNo)
 {
 	DWORD waitResult;
-	int* intThreadNo = (int*)threadNo;
+	//int* intThreadNo = (int*)threadNo;
 	
 	std::cout << "A worker thread has been created with an ID of: " << GetCurrentThreadId() << std::endl;
 
@@ -198,13 +208,13 @@ DWORD WINAPI threadWork(LPVOID threadNo)
 				{
 					for (int j = 0; j < 10; j++)
 					{
-						count = count + abs(*intThreadNo);  //Update the count
+						count = count + abs((long)GetCurrentThreadId());  //Update the count
 					}
 					
 					//<Exit critical section.You provide this code.>
 					if (!ReleaseMutex(mutex))
 					{
-						return false;
+						return 1;
 					}
 					
 					break;
@@ -212,7 +222,7 @@ DWORD WINAPI threadWork(LPVOID threadNo)
 				case WAIT_FAILED:
 				case WAIT_ABANDONED:
 				{
-					return false;
+					return 1;
 				}
 				default:
 					break;
@@ -222,7 +232,7 @@ DWORD WINAPI threadWork(LPVOID threadNo)
 		{
 			// Critical section. The following loop is the CS. Do not change its’ code.  
 			for (int j = 0; j<10; j++)
-				count = count + abs(*intThreadNo);  //Update the count
+				count = count + abs((long) GetCurrentThreadId());  //Update the count
 		}
 	}
 
