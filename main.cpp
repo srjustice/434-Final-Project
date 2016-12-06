@@ -8,21 +8,24 @@
 #include <string>
 
 #define MAXTHREADCOUNT 100
+#define MAXITERATIONS 100000000
+#define NUMPARAMS 4
 
 DWORD WINAPI threadWork(LPVOID);
 
 //Command Line Parameters
-int enableMutex = false;	//Command line parameter
-int count = 0;	//Actual count after update by threads
-unsigned long numberIter = 0;	//Command line parameter
+int enableMutex = false;		//Whether or not to enable the mutex
+int count = 0;					//Actual count after update by threads
+unsigned long numberIter = 0;	//Number of iterations each thread should perform
 
-//Global Handle
+//Global handle to the mutex
 HANDLE countMutex;
 
 //Program Header
 const std::string title = "Sam Justice - CSIS 443, Fall 2016 - Final Project";
 
-int main(int argc, char * argv[]) {
+int main(int argc, char * argv[]) 
+{
 	//Local variables
 	char exit;
 	int theoreticalCount = 0;
@@ -43,9 +46,22 @@ int main(int argc, char * argv[]) {
 	std::cout << std::endl << "Running Final Project . . . " << std::endl;
 	std::cout << title << std::endl << std::endl << std::endl;
 
+	//Verify the correct number of command line parameters were passed into the program
+	if (argc != NUMPARAMS)
+	{
+		std::cout << "Incorrect number of command line parameters passed into the program. "
+			<< "This program takes three parameters." << std::endl << "Please exit and try again." 
+			<< std::endl << std::endl;
+
+		std::cout << "Enter any key to end execution of this program   . . .   ";
+		std::cin >> exit;                                             //to pause program
+
+		return -1;
+	}
+
 	//Get the command line parameters and verify they are in the proper bounds
 	int numberOfThreads = atoi(argv[1]);
-	if (numberOfThreads < 0 || numberOfThreads > 100)
+	if (numberOfThreads < 0 || numberOfThreads > MAXTHREADCOUNT)
 	{
 		std::cout << "Number of threads must be between 0 and 100 (inclusive). Please exit and try again." 
 			<< std::endl << std::endl;
@@ -57,7 +73,7 @@ int main(int argc, char * argv[]) {
 	}
 
 	numberIter = atoi(argv[2]);
-	if (numberIter < 0 || numberIter > 100000000)
+	if (numberIter < 0 || numberIter > MAXITERATIONS)
 	{
 		std::cout << "Number of iterations must be between 0 and 100000000 (inclusive). "
 			<< "Please exit and try again." << std::endl << std::endl;
@@ -84,9 +100,10 @@ int main(int argc, char * argv[]) {
 	{
 		countMutex = CreateMutex(NULL, FALSE, NULL);
 
+		//If creation of the mutex failed, exit the program
 		if (countMutex == NULL)
 		{
-			std::cout << "Creation of a mutex failed. Please exit and try again." << std::endl << std::endl;
+			std::cout << "Creation of the mutex failed. Please exit and try again." << std::endl << std::endl;
 
 			std::cout << "Enter any key to end execution of this program   . . .   ";
 			std::cin >> exit;                                             //to pause program
@@ -95,13 +112,13 @@ int main(int argc, char * argv[]) {
 		}
 	}
 
-	//Create the threads and calculate the theoretical count value based on the thread IDs
+	//Create the threads and calculate the theoretical value of count based on the thread IDs
 	for (int i = 0; i < numberOfThreads; i++) {
 		threads[i] = (HANDLE) _beginthreadex(lpThreadAttributes, stackSize, (unsigned(_stdcall *) (void *)) &threadWork, NULL, (unsigned)dwCreationFlags, (unsigned *)&targetThreadID);
-		theoreticalCount = theoreticalCount + ((10 * targetThreadID) * numberIter);
+		theoreticalCount = theoreticalCount + ((10 * abs((long) targetThreadID)) * numberIter);
 		Sleep(10);	// Let the new thread run
 	}
-
+	
 	//Use a loop to wait for each thread object to be signaled (this is necessary because WaitForMultipleObjects can 
 	//only wait on a maximum of 64 threads)
 	for (int i = 0; i < numberOfThreads; i++)
@@ -132,7 +149,7 @@ int main(int argc, char * argv[]) {
 		//Verify the thread executed successfully
 		if (GetExitCodeThread(threads[i], &exitCode) != 0)
 		{
-			switch ((int) exitCode)
+			switch ((long) exitCode)
 			{
 				case waitFailure:
 				{
@@ -169,13 +186,14 @@ int main(int argc, char * argv[]) {
 	}
 
 	//Output the actual value of count and the theoretical value of count
-	std::cout << std::endl << "The value of count is: " << count << std::endl;
-	std::cout << "The value of count should be: " << theoreticalCount << std::endl;
+	std::cout << std::endl << "The value of \"count\" is: " << count << std::endl;
+	std::cout << "The value of \"count\" should be: " << theoreticalCount << std::endl;
 
-	//Close each thread and the mutex
+	//Close each thread
 	for (int i = 0; i < numberOfThreads; i++)
 		CloseHandle(threads[i]);
 
+	//Close the mutex
 	CloseHandle(countMutex);
 
 	//Exit the program
@@ -200,7 +218,7 @@ DWORD WINAPI threadWork(LPVOID threadNo)
 
 		if (enableMutex == true)
 		{
-			//Obtain mutex before entering critical section
+			//Obtain the mutex before entering the critical section
 			waitResult = WaitForSingleObject(countMutex, INFINITE);
 			
 			switch (waitResult)
